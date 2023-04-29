@@ -8,7 +8,7 @@ This script allows you to explore a directory and generate a .txt file with the 
 ## Usage
 To use the script, run the following command in the terminal:
 
-python explore_directory.py -n <directory_name> -e <exclude_string> -c <contain_string>
+```python explore_directory.py -n <directory_name> -e <exclude_string> -c <contain_string>```
 
 - `directory_name`: The name of the directory to explore (required)
 - `exclude_string`: String to exclude from file names (optional)
