@@ -2,10 +2,10 @@ import os
 import argparse
 from datetime import datetime
 
-def is_excluded(file_path, exclude_str):
+def is_excluded(file_path, exclude_list):
     if file_path.endswith("go.mod") or file_path.endswith("go.sum") or "_test" in file_path or file_path.endswith(".yml") or file_path.endswith(".yaml"):
         return True
-    if exclude_str and exclude_str in file_path:
+    if exclude_list and any(exclude in file_path for exclude in exclude_list):
         return True
     if ".git" in file_path.split(os.path.sep):
         return True
@@ -13,13 +13,15 @@ def is_excluded(file_path, exclude_str):
 
 def explore_directory(directory, output_file, exclude_str, contain_str):
     explored_files = []  # List of explored files
+    exclude_list = [] if not exclude_str else exclude_str.split(",")
     contain_list = [] if not contain_str else contain_str.split(",")
+    
     for root, dirs, files in os.walk(directory):
         dirs[:] = [d for d in dirs if not d.startswith('.')] # Ignore hidden directories (starting with a dot)
         for file in files:
             try:
                 file_path = os.path.join(root, file)
-                if is_excluded(file_path, exclude_str):
+                if is_excluded(file_path, exclude_list):
                     continue
                 if contain_list and not any(contain in file for contain in contain_list):
                     continue
@@ -45,7 +47,7 @@ def explore_directory(directory, output_file, exclude_str, contain_str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Explore a directory and generate a .txt file with the directory's structure and the contents of its files.")
     parser.add_argument("-n", "--directory_name", type=str, required=True, help="The name of the directory to explore")
-    parser.add_argument("-e", "--exclude", type=str, required=False, help="String to exclude from file names")
+    parser.add_argument("-e", "--exclude", type=str, required=False, help="Comma-separated list of strings to exclude from file paths")
     parser.add_argument("-c", "--contain", type=str, required=False, help="Comma-separated list of strings to search in file names")
 
     args = parser.parse_args()
@@ -64,6 +66,7 @@ if __name__ == "__main__":
         f.write("")
 
     explore_directory(directory_to_explore, output_file, exclude_str, contain_str)
+
 
 
 

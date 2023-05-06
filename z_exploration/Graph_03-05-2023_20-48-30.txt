@@ -1,0 +1,523 @@
+Graph/validator.go
+package main
+
+import "errors"
+
+func ValidateNodeData(data interface{}) error {
+	switch data.(type) {
+	case *NodeProfileCollaboratorData, *NodeProfileMaliciousData, *NodeThreatData:
+		return nil
+	default:
+		return errors.New("unsupported data type")
+	}
+}
+
+func ValidateLinkData(data interface{}) error {
+	switch data.(type) {
+	case *ColToColLinkData:
+		return nil
+	default:
+		return errors.New("unsupported link data type")
+	}
+}
+
+
+--------------------
+
+Graph/graph.go
+package main
+
+import (
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// TO DO:
+// - Validators for data in nodes and links creation:
+// 		Why?   - Insure data content
+//		Where? - NewNode(), NewLink()
+// - ID Incrementer in Node and Link creation:
+// 		Why?   - Every Node and Link should have an unique ID
+//		Where? - NewNode(), NewLink()
+
+func NewGraph() *Graph {
+	return &Graph{
+		Nodes: []*Node{},
+		Links: []*Link{},
+	}
+}
+
+// WARNING: The use of interface for the data field induces validators IMPERATIVELY
+// in order to have the insurance that the injected data is correct.
+func NewNode(nodeType string, data interface{}) (*Node, error) {
+	err := ValidateNodeData(data)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Node{
+		ID:           id,
+		Type:         nodeType,
+		Neighbors:    []*Node{},
+		Data:         data,
+		CreationDate: time.Now(),
+		LastUpdate:   time.Now(),
+	}, nil
+}
+
+// WARNING: The use of interface for the data field induces validators IMPERATIVELY
+// in order to have the insurance that the injected data is correct.
+func (g *Graph) NewLink(linkType string, from, to *Node, data interface{}) (*Link, error) {
+	err := ValidateLinkData(data)
+	if err != nil {
+		return nil, err
+	}
+
+	if from == nil {
+		return nil, errors.New("from node cannot be nil")
+	}
+	if to == nil {
+		return nil, errors.New("to node cannot be nil")
+	}
+	if from == to {
+		return nil, errors.New("from node and to node cannot be the same")
+	}
+	if err := g.CheckNodesExistence([]*Node{from, to}); err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Link{
+		ID:           id.String(),
+		Type:         linkType,
+		From:         from,
+		To:           to,
+		Data:         data,
+		CreationDate: time.Now(),
+		LastUpdate:   time.Now(),
+	}, nil
+}
+
+func (g *Graph) AddNodeToGraph(n *Node) error {
+	if n == nil {
+		return errors.New("node cannot be nil")
+	}
+	g.Nodes = append(g.Nodes, n)
+	return nil
+}
+
+func (g *Graph) AddMultipleNodesToGraph(nodes []*Node) error {
+	if len(nodes) == 0 {
+		return errors.New("nodes slice cannot be empty")
+	}
+	for _, node := range nodes {
+		err := g.AddNodeToGraph(node)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (g *Graph) AddLinkToGraph(l *Link) error {
+	if l == nil {
+		return errors.New("link cannot be nil")
+	}
+	g.Links = append(g.Links, l)
+	return nil
+}
+
+func (g *Graph) AddMultipleLinksToGraph(links []*Link) error {
+	if len(links) == 0 {
+		return errors.New("links slice cannot be empty")
+	}
+	for _, link := range links {
+		err := g.AddLinkToGraph(link)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CHECKERS
+
+func (g *Graph) CheckNodeExistence(node *Node) error {
+	for _, n := range g.Nodes {
+		if n == node {
+			return nil
+		}
+	}
+	return fmt.Errorf("node %v not found in graph", node)
+}
+
+func (g *Graph) CheckNodesExistence(nodes []*Node) error {
+	nodeMap := make(map[*Node]bool)
+	for _, node := range g.Nodes {
+		nodeMap[node] = true
+	}
+	for _, node := range nodes {
+		if _, ok := nodeMap[node]; !ok {
+			return fmt.Errorf("node %v not found in graph", node)
+		}
+	}
+	return nil
+}
+
+func (g *Graph) CheckNodeWithID(id uuid.UUID) error {
+	for _, node := range g.Nodes {
+		if node.ID == id {
+			return nil
+		}
+	}
+	return fmt.Errorf("node with ID %v not found in graph", id)
+}
+
+func (g *Graph) CheckNodesExistenceWithIDs(nodeIDs []uuid.UUID) error {
+	nodeMap := make(map[uuid.UUID]bool)
+	for _, node := range g.Nodes {
+		nodeMap[node.ID] = true
+	}
+	for _, id := range nodeIDs {
+		if _, ok := nodeMap[id]; !ok {
+			return fmt.Errorf("node with ID %v not found in graph", id)
+		}
+	}
+	return nil
+}
+
+
+--------------------
+
+Graph/file.go
+package main
+
+import (
+	"encoding/json"
+	"io"
+	"io/ioutil"
+)
+
+func (g *Graph) SaveToFile(filename string) error {
+	// Convertir le graphe en un tableau de nodes
+	nodes := make([]Node, len(g.Nodes))
+	for i, n := range g.Nodes {
+		nodes[i] = *n
+	}
+
+	// Convertir le tableau de nodes en JSON
+	data, err := json.Marshal(nodes)
+	if err != nil {
+		return err
+	}
+
+	// Écrire les données JSON dans le fichier
+	err = ioutil.WriteFile(filename, data, 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func LoadFromFile(filename string) (*Graph, error) {
+	// Lire les données JSON depuis le fichier
+	data, err := io.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	// Décoder les données JSON en un tableau de nodes
+	var nodes []Node
+	err = json.Unmarshal(data, &nodes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Créer un nouveau graphe et ajouter les nodes
+	graph := NewGraph()
+	for _, n := range nodes {
+		graph.AddNodeToGraph(&n)
+	}
+
+	return graph, nil
+}
+
+
+--------------------
+
+Graph/model.go
+package main
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// Graph Node and Links
+
+type Graph struct {
+	Nodes []*Node
+	Links []*Link
+}
+
+type Node struct {
+	ID           uuid.UUID
+	Type         string
+	Neighbors    []*Node
+	Data         interface{}
+	CreationDate time.Time
+	LastUpdate   time.Time
+}
+
+type Link struct {
+	ID           string
+	Type         string
+	From         *Node
+	To           *Node
+	Data         interface{}
+	CreationDate time.Time
+	LastUpdate   time.Time
+}
+
+// Data
+
+// Nodes Data
+
+// Node: Profile - Type: Collaborator
+type NodeProfileCollaboratorData struct {
+	Scores    Scores // Centrality, Exposure, Threat Propagation, Risk, Awareness
+	Community string // Community Detection ML
+}
+
+// Node: Profile - Type: Malicious
+type NodeProfileMaliciousData struct {
+}
+
+// Node: Threat
+type NodeThreatData struct {
+	Action          string
+	Folder          string
+	From            string
+	FromHeader      string
+	ID              string
+	LastReport      string
+	LastReportDate  string
+	MessageID       string
+	RemediationIDs  []string
+	RemediationType string
+	SenderIP        string
+	Size            string
+	Status          string
+	Subject         string
+	Substatus       string
+	To              string
+	Header          string
+	ToHeader        string
+	URLs            string
+	WhiteListed     string
+}
+
+// Links Data
+
+// Link: Collaborator To Collaborator
+type ColToColLinkData struct {
+	Interactions Interactions // Mails
+}
+
+type Interactions struct {
+	Total     int64 // For now will represent the weight
+	Marketing int64
+	Social    int64
+	Purchase  int64
+	Travel    int64
+	// ...
+}
+
+// Link: Malicious to Collaborator
+
+// Scores
+
+type Scores struct {
+	Centrality Centrality
+	// Exposure          Exposure
+	// ThreatPropagation ThreatPropagation
+	// Risk              Risk
+	// Awareness         Awareness
+}
+
+type Centrality struct {
+	Degree      float64
+	Closeness   float64
+	Betweenness float64
+	Eigenvector float64
+	PageRank    float64
+	Katz        float64
+	Subgraph    float64
+}
+
+// TO DO
+type Exposure struct {
+}
+
+// TO DO
+type ThreatPropagation struct {
+}
+
+// TO DO
+type Risk struct {
+}
+
+// TO DO
+type Awareness struct {
+}
+
+
+--------------------
+
+Graph/main.go
+package main
+
+import (
+	"fmt"
+)
+
+func (g *Graph) PrintGraph() {
+	// Création d'une map pour stocker les IDs des nodes
+	nodeIDs := make(map[int64]bool)
+	for _, node := range g.Nodes {
+		nodeIDs[node.ID] = true
+	}
+
+	// Parcours de chaque node pour afficher ses liens sortants
+	for _, node := range g.Nodes {
+		fmt.Printf("Node %d (%s):\n", node.ID, node.Type)
+		for _, link := range g.Links {
+			if link.From.ID == node.ID {
+				fmt.Printf("\t-> %s (%d)\n", link.To.Type, link.To.ID)
+			}
+		}
+		fmt.Println()
+	}
+
+	// Affichage des nodes qui n'ont pas de liens sortants
+	for _, node := range g.Nodes {
+		if _, ok := nodeIDs[node.ID]; !ok {
+			fmt.Printf("Node %d (%s):\n", node.ID, node.Type)
+			fmt.Println("\t-> no links")
+			fmt.Println()
+		}
+	}
+}
+
+func main() {
+	// Création d'un nouveau graph vide
+	graph := NewGraph()
+
+	// Création de 5 nodes de type "profil" "collaborator"
+	for i := 1; i <= 5; i++ {
+		nodeData := &NodeProfileCollaboratorData{
+			Scores: Scores{
+				Centrality: Centrality{
+					Degree:      0,
+					Closeness:   0,
+					Betweenness: 0,
+					Eigenvector: 0,
+					PageRank:    0,
+					Katz:        0,
+					Subgraph:    0,
+				},
+			},
+			Community: "",
+		}
+		node, err := NewNode("profil", nodeData)
+		if err != nil {
+			return
+		}
+		graph.AddNodeToGraph(node)
+	}
+
+	// Affichage du nombre de nodes dans le graph
+	fmt.Printf("Nombre de nodes dans le graph : %d\n", len(graph.Nodes))
+
+	graph.PrintGraph()
+}
+
+
+--------------------
+
+Graph/v1_degree.go
+package main
+
+import "errors"
+
+// DegreeCentrality compute normalized degree centrality for a given Node in the Graph
+func (g *Graph) DegreeCentrality(node *Node, totalWeight float64) (float64, error) {
+	if node == nil {
+		return 0, errors.New("node cannot be nil")
+	}
+
+	if totalWeight == 0 {
+		return 0, errors.New("total weight is zero, cannot calculate normalized degree centrality")
+	}
+
+	degree := float64(0)
+	for _, link := range g.Links {
+		if link.From == node || link.To == node {
+			if colToColData, ok := link.Data.(*ColToColLinkData); ok {
+				degree += float64(colToColData.Interactions.Total)
+			}
+		}
+	}
+	normalizedDegree := degree / totalWeight
+	return normalizedDegree, nil
+
+}
+
+// DegreeCentralityAllNodes compute normalized degree centrality for all Nodes in the Graph
+func (g *Graph) DegreeCentralityAllNodes() error {
+	totalWeight, err := g.TotalWeight()
+	if err != nil {
+		return err
+	}
+	for _, node := range g.Nodes {
+		if nodeProfileData, ok := node.Data.(*NodeProfileCollaboratorData); ok {
+			nodeProfileData.Scores.Centrality.Degree, err = g.DegreeCentrality(node, totalWeight)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// TotalWeight return the sum of every link in the graph
+func (g *Graph) TotalWeight() (float64, error) {
+	if len(g.Links) == 0 {
+		return 0, errors.New("no links in the graph, total weight cannot be calculated")
+	}
+	totalWeight := float64(0)
+	for _, link := range g.Links {
+		if colToColData, ok := link.Data.(*ColToColLinkData); ok {
+			totalWeight += float64(colToColData.Interactions.Total)
+		}
+	}
+	return totalWeight, nil
+}
+
+
+--------------------
+
