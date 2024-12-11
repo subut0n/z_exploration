@@ -1,26 +1,32 @@
-# Directory Explorer
+# README
 
-This script allows you to explore a directory and generate a .txt file with the directory's structure and the contents of its files. It excludes specific files and directories, and searches for specific strings in file names.
+## Overview
 
-## Prerequisites
-- Python 3.x
+This script explores a given directory, filters files based on specified criteria, and consolidates their contents into a timestamped text file inside the `z_exploration` directory. Each run creates a unique output file that lists and includes the contents of all matching files.
 
-## Usage
-To use the script, run the following command in the terminal:
+After generating the result file, the make targets allow copying its contents directly to the clipboard, depending on the operating system (macOS or Ubuntu).
 
-```python explore_directory.py -n <directory_name> -e <exclude_string> -c <contain_string>```
+## How It Works
 
-- `directory_name`: The name of the directory to explore (required)
-- `exclude_string`: String to exclude from file names (optional)
-- `contain_string`: Comma-separated list of strings to search in file names (optional)
+1. The main script is `explore_directory.py`. It:
+   - Recursively traverses the specified directory.
+   - Applies optional exclusion patterns (`-e`) and optional name-containment filters (`-c`).
+   - Produces a timestamped text file in `z_exploration` with the paths and contents of the matched files.
+   - Inserts a separator (`--------------------`) between each listed file.
 
-The script will generate a timestamped .txt file in the `z_exploration` directory. The file will contain the directory's structure and the contents of its files.
+2. The provided `Makefile` simplifies running the script and copying the results. There are two primary targets:
+   - `make cp`: For macOS.
+   - `make cpy`: For Ubuntu.
 
-## Makefile
-- `clean`: Removes all .txt files in the `z_exploration` directory
-- `regen`: Cleans the directory and explores the specified directory with the specified exclude and contain strings
-- `copy`: Copies the contents of the most recently generated .txt file to the clipboard
+   These targets:
+   - Prompt the user for the directory path, exclude patterns, and contain patterns.
+   - Execute the Python script with the provided parameters.
+   - Find the most recently generated file in `z_exploration` and copy its contents to the clipboard.
 
-## Notes
-- The script excludes specific files and directories by default. You can add additional exclusions in the `is_excluded` function.
-- The script ignores hidden directories (starting with a dot).
+3. The `make clean` target removes all files in `z_exploration`.
+
+## Parameters
+
+- `-n, --directory_name`: Required. The path of the directory to explore.
+- `-e, --exclude`: Optional. A comma-separated list of patterns. Any file whose path includes one of these patterns is ignored.
+- `-c, --contain`: Optional. A comma-separated list of patterns. Only files whose names contain at least one of these patterns will be included.
